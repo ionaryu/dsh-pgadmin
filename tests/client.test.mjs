@@ -103,7 +103,7 @@ test('registers one layered page: guide capsule, body seat, and command', async 
   assert.equal(view.type, 'div')
   const iframe = view.props.children[1]
   assert.equal(iframe.type, 'iframe')
-  assert.equal(iframe.props.src, 'http://127.0.0.1:5050')
+  assert.equal(iframe.props.src, 'http://127.0.0.1:5051')
   assert.match(iframe.props.sandbox, /allow-same-origin/)
   assert.match(iframe.props.sandbox, /allow-forms/)
 })
@@ -133,3 +133,4 @@ test('an explicit url config is framed verbatim', async () => {
   const view = calls.slots[0].component()
   assert.equal(view.props.children[1].props.src, 'https://pgadmin.example.com/')
 })
+

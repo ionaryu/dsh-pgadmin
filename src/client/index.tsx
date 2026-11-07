@@ -1,15 +1,11 @@
 /**
  * Client half of `dsh-pgadmin`: one right-Sidebar page that shows pgAdmin 4.
  *
- * The page frames the pgAdmin you are already running — the plugin starts
- * nothing, proxies nothing, and stores nothing. It is a page type of DSH's
- * public right-Sidebar registry: a guide capsule in the + menu, the
- * `pgadmin.open` command, and the body registered into the keyed
- * `sidebar.right.pane.tab` seat under this package's id.
- *
- * pgAdmin sends `X-Frame-Options: SAMEORIGIN` by default, so the frame only
- * renders once that heading is off in pgAdmin's `config_local.py`
- * (`X_FRAME_OPTIONS = ""`). That is a pgAdmin setting, not a plugin one.
+ * The page frames the loopback proxy this package's Host half runs. The Host
+ * half also starts pgAdmin 4 on first use and stops it on unload, so the panel
+ * works without the user launching a server — the proxy exists only because
+ * pgAdmin's `X-Frame-Options: SAMEORIGIN` would otherwise keep the frame from
+ * rendering at all.
  */
 
 import { useState } from 'react'
@@ -32,12 +28,14 @@ const NS = 'dsh-pgadmin'
 /** Command id the guide capsule shows and the keyboard runs. */
 const OPEN_COMMAND = 'pgadmin.open'
 
-/** pgAdmin's default address; the page frames it unless configured otherwise. */
-const DEFAULT_URL = 'http://127.0.0.1:5050'
+/** pgAdmin's proxy port; the page frames it unless configured otherwise. */
+const DEFAULT_PORT = 5051
 
 /** Configuration, mirroring the Host half's entry config. */
 export interface SidebarConfig {
-  /** Address of the running pgAdmin 4. Default `http://127.0.0.1:5050`. */
+  /** Port the Host half's proxy listens on. Default `5051`. */
+  readonly port?: number
+  /** Complete URL to frame instead of `http://<gui host>:<port>`. */
   readonly url?: string
 }
 
@@ -57,7 +55,7 @@ interface Dictionary {
 
 const EN: Dictionary = {
   title: 'pgAdmin',
-  guide: 'Show the pgAdmin 4 you are running in this panel.',
+  guide: 'Start pgAdmin 4 and show it in this panel.',
   reload: 'Reload',
   open: 'Open in browser',
   frame: 'pgAdmin 4',
@@ -67,21 +65,21 @@ const DICTIONARIES: Record<string, Dictionary> = {
   en: EN,
   ko: {
     title: 'pgAdmin',
-    guide: '실행 중인 pgAdmin 4를 이 패널에 띄웁니다.',
+    guide: 'pgAdmin 4를 켜서 이 패널에 띄웁니다.',
     reload: '새로고침',
     open: '브라우저로 열기',
     frame: 'pgAdmin 4',
   },
   ja: {
     title: 'pgAdmin',
-    guide: '実行中の pgAdmin 4 をこのパネルに表示します。',
+    guide: 'pgAdmin 4 を起動してこのパネルに表示します。',
     reload: '再読み込み',
     open: 'ブラウザで開く',
     frame: 'pgAdmin 4',
   },
   zh: {
     title: 'pgAdmin',
-    guide: '在此面板中显示正在运行的 pgAdmin 4。',
+    guide: '启动 pgAdmin 4 并在此面板中显示。',
     reload: '重新加载',
     open: '在浏览器中打开',
     frame: 'pgAdmin 4',
@@ -114,12 +112,17 @@ interface ClientContext {
 }
 
 /**
- * Frame address: the configured pgAdmin, else its default address.
+ * Frame address: the configured override, else the Host half's proxy on the
+ * GUI's own host — the same host keeps pgAdmin's `SameSite=Lax` session cookie
+ * same-site, which it needs to stay logged in inside a frame.
  * @param config - the entry configuration.
  * @returns the URL the page frames.
  */
 function frameUrl(config: SidebarConfig): string {
-  return typeof config.url === 'string' && config.url !== '' ? config.url : DEFAULT_URL
+  if (typeof config.url === 'string' && config.url !== '') return config.url
+  const port = Number(config.port ?? DEFAULT_PORT)
+  const host = typeof window === 'undefined' ? '127.0.0.1' : window.location.hostname
+  return `http://${host}:${String(port)}`
 }
 
 /** The guide's database glyph, drawn on the product icon grid. */
@@ -265,3 +268,4 @@ export function apply(ctx: ClientContext, config: SidebarConfig = {}): void {
     }), 'dsh-pgadmin: command')
   })
 }
+
