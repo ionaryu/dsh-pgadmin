@@ -4,19 +4,14 @@
 # starts the loopback proxy and the browser half registers the right-Sidebar
 # page. `name` resolves by package name from the profile's node_modules.
 #
-# Every key below is optional; the values shown are the defaults.
+# The row carries no config on purpose: the defaults live in `src/index.ts`
+# (`autostart: true`, `command: pgadmin4`, upstream `http://127.0.0.1:5050`,
+# proxy port `5051`). Override them from the profile's own cordis.patch.yml:
+#
+#   - id: pgadmin
+#     config:
+#       autostart: true
+#       command: 'C:/path/to/pgadmin4.bat'   # when it is not on PATH
 - insert:
     - id: pgadmin
       name: dsh-pgadmin
-      config:
-        # pgAdmin 4 web server this proxy forwards to.
-        upstream: http://127.0.0.1:5050
-        # Loopback address and port the sidebar frames instead.
-        host: 127.0.0.1
-        port: 5051
-        # Spawn `command` when nothing answers on `upstream` (see README).
-        autostart: false
-        command: pgadmin4
-        commandArgs: []
-        # Extra CSP `frame-ancestors` sources. Empty leaves the CSP untouched.
-        frameAncestors: []
