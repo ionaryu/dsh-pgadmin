@@ -1,0 +1,22 @@
+# dsh-pgadmin bundle patch
+#
+# The profile boots this row after its own bundle layers, so the Host half
+# starts the loopback proxy and the browser half registers the right-Sidebar
+# page. `name` resolves by package name from the profile's node_modules.
+#
+# Every key below is optional; the values shown are the defaults.
+- insert:
+    - id: pgadmin
+      name: dsh-pgadmin
+      config:
+        # pgAdmin 4 web server this proxy forwards to.
+        upstream: http://127.0.0.1:5050
+        # Loopback address and port the sidebar frames instead.
+        host: 127.0.0.1
+        port: 5051
+        # Spawn `command` when nothing answers on `upstream` (see README).
+        autostart: false
+        command: pgadmin4
+        commandArgs: []
+        # Extra CSP `frame-ancestors` sources. Empty leaves the CSP untouched.
+        frameAncestors: []

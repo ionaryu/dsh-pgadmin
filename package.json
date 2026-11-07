@@ -1,0 +1,65 @@
+{
+  "name": "dsh-pgadmin",
+  "version": "0.1.0",
+  "description": "Shows pgAdmin 4 in the DSH right sidebar through a loopback proxy that lifts its X-Frame-Options",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ionaryu/dsh-pgadmin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ionaryu/dsh-pgadmin/issues"
+  },
+  "homepage": "https://github.com/ionaryu/dsh-pgadmin#readme",
+  "author": "SwinT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "pgadmin",
+    "pgadmin4",
+    "postgresql",
+    "sidebar"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/proxy.test.mjs tests/client.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.25.12"
+  }
+}

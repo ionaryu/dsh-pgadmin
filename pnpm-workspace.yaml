@@ -1,0 +1,6 @@
+# pnpm settings for this single-package repository.
+#
+# pnpm 10+ blocks dependencies that ship an install script until it is reviewed
+# here. esbuild ships a native binary, so its script genuinely has to run.
+allowBuilds:
+  esbuild: true
