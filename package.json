@@ -55,7 +55,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test tests/proxy.test.mjs tests/client.test.mjs"
+    "test": "node --test tests/client.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

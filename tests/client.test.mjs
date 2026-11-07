@@ -82,7 +82,7 @@ test('registers one layered page: guide capsule, body seat, and command', async 
   const plugin = await loadPlugin()
   assert.equal(plugin.name, 'dsh-pgadmin')
   const { ctx, calls } = createContext()
-  plugin.apply(ctx, { port: 5051 })
+  plugin.apply(ctx, {})
 
   assert.equal(calls.registered.length, 1)
   assert.equal(calls.registered[0].namespace, 'dsh-pgadmin')
@@ -103,7 +103,7 @@ test('registers one layered page: guide capsule, body seat, and command', async 
   assert.equal(view.type, 'div')
   const iframe = view.props.children[1]
   assert.equal(iframe.type, 'iframe')
-  assert.equal(iframe.props.src, 'http://127.0.0.1:5051')
+  assert.equal(iframe.props.src, 'http://127.0.0.1:5050')
   assert.match(iframe.props.sandbox, /allow-same-origin/)
   assert.match(iframe.props.sandbox, /allow-forms/)
 })

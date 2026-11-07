@@ -1,15 +1,15 @@
 /**
  * Client half of `dsh-pgadmin`: one right-Sidebar page that shows pgAdmin 4.
  *
- * The page frames the loopback proxy started by this package's Host half, not
- * pgAdmin itself — pgAdmin answers with `X-Frame-Options: SAMEORIGIN`, which
- * no sidebar can embed. The proxy removes that header and forwards everything
- * else, so within the frame this is an ordinary pgAdmin session: its own
- * origin, its own cookies, its own login.
+ * The page frames the pgAdmin you are already running — the plugin starts
+ * nothing, proxies nothing, and stores nothing. It is a page type of DSH's
+ * public right-Sidebar registry: a guide capsule in the + menu, the
+ * `pgadmin.open` command, and the body registered into the keyed
+ * `sidebar.right.pane.tab` seat under this package's id.
  *
- * The page is a page type of DSH's public right-Sidebar registry: a guide
- * capsule in the + menu, the `pgadmin.open` command, and the body registered
- * into the keyed `sidebar.right.pane.tab` seat under this package's id.
+ * pgAdmin sends `X-Frame-Options: SAMEORIGIN` by default, so the frame only
+ * renders once that heading is off in pgAdmin's `config_local.py`
+ * (`X_FRAME_OPTIONS = ""`). That is a pgAdmin setting, not a plugin one.
  */
 
 import { useState } from 'react'
@@ -32,13 +32,12 @@ const NS = 'dsh-pgadmin'
 /** Command id the guide capsule shows and the keyboard runs. */
 const OPEN_COMMAND = 'pgadmin.open'
 
+/** pgAdmin's default address; the page frames it unless configured otherwise. */
+const DEFAULT_URL = 'http://127.0.0.1:5050'
+
 /** Configuration, mirroring the Host half's entry config. */
 export interface SidebarConfig {
-  /** Proxy port the sidebar frames. Default `5051`. */
-  readonly port?: number
-  /** Host used in the framed URL. Default the GUI's own hostname. */
-  readonly host?: string
-  /** Complete URL to frame instead of `http://<host>:<port>`. */
+  /** Address of the running pgAdmin 4. Default `http://127.0.0.1:5050`. */
   readonly url?: string
 }
 
@@ -58,7 +57,7 @@ interface Dictionary {
 
 const EN: Dictionary = {
   title: 'pgAdmin',
-  guide: 'Browse and query PostgreSQL databases in this panel.',
+  guide: 'Show the pgAdmin 4 you are running in this panel.',
   reload: 'Reload',
   open: 'Open in browser',
   frame: 'pgAdmin 4',
@@ -68,21 +67,21 @@ const DICTIONARIES: Record<string, Dictionary> = {
   en: EN,
   ko: {
     title: 'pgAdmin',
-    guide: '이 패널에서 PostgreSQL 데이터베이스를 조회하고 쿼리합니다.',
+    guide: '실행 중인 pgAdmin 4를 이 패널에 띄웁니다.',
     reload: '새로고침',
     open: '브라우저로 열기',
     frame: 'pgAdmin 4',
   },
   ja: {
     title: 'pgAdmin',
-    guide: 'このパネルで PostgreSQL データベースを閲覧・クエリします。',
+    guide: '実行中の pgAdmin 4 をこのパネルに表示します。',
     reload: '再読み込み',
     open: 'ブラウザで開く',
     frame: 'pgAdmin 4',
   },
   zh: {
     title: 'pgAdmin',
-    guide: '在此面板中浏览和查询 PostgreSQL 数据库。',
+    guide: '在此面板中显示正在运行的 pgAdmin 4。',
     reload: '重新加载',
     open: '在浏览器中打开',
     frame: 'pgAdmin 4',
@@ -115,17 +114,12 @@ interface ClientContext {
 }
 
 /**
- * Frame address: the explicit override, else the proxy on the GUI's own host —
- * the same host keeps the pgAdmin session cookie same-site, which `SameSite=Lax`
- * requires before pgAdmin will stay logged in inside the frame.
+ * Frame address: the configured pgAdmin, else its default address.
  * @param config - the entry configuration.
  * @returns the URL the page frames.
  */
 function frameUrl(config: SidebarConfig): string {
-  if (typeof config.url === 'string' && config.url !== '') return config.url
-  const port = Number(config.port ?? 5051)
-  const host = config.host ?? (typeof window === 'undefined' ? '127.0.0.1' : window.location.hostname)
-  return `http://${host}:${String(port)}`
+  return typeof config.url === 'string' && config.url !== '' ? config.url : DEFAULT_URL
 }
 
 /** The guide's database glyph, drawn on the product icon grid. */
@@ -149,7 +143,7 @@ function PgAdminIcon({ size = 16, className }: { size?: number; className?: stri
   )
 }
 
-/** A toolbar control: quiet, 24px tall, and readable next to pgAdmin's chrome. */
+/** A toolbar control: quiet, 22px tall, readable next to pgAdmin's chrome. */
 const buttonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
