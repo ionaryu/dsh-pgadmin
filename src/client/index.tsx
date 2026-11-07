@@ -51,6 +51,14 @@ interface Dictionary {
   open: string
   /** Accessible name of the framed region. */
   frame: string
+  /** Start pgAdmin. */
+  start: string
+  /** Stop pgAdmin. */
+  stop: string
+  /** Start is in flight. */
+  starting: string
+  /** Stop is in flight. */
+  stopping: string
 }
 
 const EN: Dictionary = {
@@ -59,6 +67,10 @@ const EN: Dictionary = {
   reload: 'Reload',
   open: 'Open in browser',
   frame: 'pgAdmin 4',
+  start: 'Start',
+  stop: 'Stop',
+  starting: 'Starting…',
+  stopping: 'Stopping…',
 }
 
 const DICTIONARIES: Record<string, Dictionary> = {
@@ -69,6 +81,10 @@ const DICTIONARIES: Record<string, Dictionary> = {
     reload: '새로고침',
     open: '브라우저로 열기',
     frame: 'pgAdmin 4',
+    start: '켜기',
+    stop: '끄기',
+    starting: '켜는 중…',
+    stopping: '끄는 중…',
   },
   ja: {
     title: 'pgAdmin',
@@ -76,6 +92,10 @@ const DICTIONARIES: Record<string, Dictionary> = {
     reload: '再読み込み',
     open: 'ブラウザで開く',
     frame: 'pgAdmin 4',
+    start: '起動',
+    stop: '停止',
+    starting: '起動しています…',
+    stopping: '停止しています…',
   },
   zh: {
     title: 'pgAdmin',
@@ -83,6 +103,10 @@ const DICTIONARIES: Record<string, Dictionary> = {
     reload: '重新加载',
     open: '在浏览器中打开',
     frame: 'pgAdmin 4',
+    start: '启动',
+    stop: '停止',
+    starting: '正在启动…',
+    stopping: '正在停止…',
   },
 }
 
@@ -177,6 +201,25 @@ interface PageProps {
  */
 function PgAdminPage({ url, t }: PageProps): unknown {
   const [generation, setGeneration] = useState(0)
+  const [busy, setBusy] = useState<'idle' | 'start' | 'stop'>('idle')
+
+  /**
+   * Ask the Host half to start or stop pgAdmin, then show the result.
+   * @param action - which control was pressed.
+   */
+  const control = (action: 'start' | 'stop'): void => {
+    setBusy(action)
+    void fetch(`${url}/__dsh-pgadmin/${action}`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+    })
+      .catch(() => undefined)
+      .finally(() => {
+        setBusy('idle')
+        setGeneration(value => value + 1)
+      })
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div
@@ -201,6 +244,12 @@ function PgAdminPage({ url, t }: PageProps): unknown {
         >
           {url}
         </span>
+        <button type="button" style={buttonStyle} disabled={busy !== 'idle'} onClick={() => control('start')}>
+          {busy === 'start' ? t('starting') : t('start')}
+        </button>
+        <button type="button" style={buttonStyle} disabled={busy !== 'idle'} onClick={() => control('stop')}>
+          {busy === 'stop' ? t('stopping') : t('stop')}
+        </button>
         <button type="button" style={buttonStyle} onClick={() => setGeneration(value => value + 1)}>
           {t('reload')}
         </button>

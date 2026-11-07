@@ -16,7 +16,7 @@ sidebar iframe ──▶ 127.0.0.1:5051 (in-process proxy) ──▶ 127.0.0.1:5
 
 - **The process.** The first request starts `pgadmin4` (unless one is already listening), waits for it, and stops the process it started when the plugin unloads. A pgAdmin that was already running is used but never killed.
 - **The frame.** pgAdmin answers every response with `X-Frame-Options: SAMEORIGIN`, which no page on another origin may embed. The proxy forwards requests unchanged and removes that one header, so no pgAdmin configuration has to change.
-- The browser half registers one right-Sidebar page: a **pgAdmin** capsule in the `+` menu, the `pgadmin.open` command, and a view with reload and open-in-browser controls.
+- The browser half registers one right-Sidebar page: a **pgAdmin** capsule in the `+` menu, the `pgadmin.open` command, and a toolbar with **Start**, **Stop**, Reload and Open in browser. Start and Stop drive the Host half through `/__dsh-pgadmin/start` and `/__dsh-pgadmin/stop` on the proxy, so the panel owns the process without leaving the page.
 - While pgAdmin starts, the panel waits on the proxy; if it cannot start, the panel shows the reason and the captured stderr instead of a blank frame.
 
 ## Requirements
@@ -46,11 +46,15 @@ Every key is optional; the defaults are shown.
     autostart: true                   # start pgAdmin when nothing answers
     command: pgadmin4                 # command used to start it
     commandArgs: []                   # arguments for that command
+    setupEmail: ''                    # first-run account (see below)
+    setupPassword: ''                 # first-run account password
     frameAncestors: []                # extra CSP sources allowed to frame it
     url: http://127.0.0.1:5051        # frame this URL instead of host:port
 ```
 
 `autostart: false` uses only a pgAdmin you run yourself; the panel then reports that nothing is listening instead of starting one.
+
+`setupEmail` and `setupPassword` are read only when pgAdmin's database has no user yet: they become `PGADMIN_SETUP_EMAIL` / `PGADMIN_SETUP_PASSWORD` for the child, which turns pgAdmin's interactive first-run prompt into account creation. Without them, a missing database makes pgAdmin fail with `EOFError` (its prompt has no stdin), and the panel says so. Remove both values once the account exists — they are inert from then on.
 
 ## Security notes
 
@@ -63,6 +67,7 @@ Every key is optional; the defaults are shown.
 | Symptom | Cause |
 |:--|:--|
 | "pgAdmin 4 did not start" in the panel | `pgadmin4` is not on `PATH`; the page shows its stderr — set `command` to an absolute path. |
+| The stderr ends in `EOFError` | pgAdmin's database has no user and pgAdmin tried to prompt: set `setupEmail` and `setupPassword`. |
 | "pgAdmin 4 is not reachable" with autostart off | Nothing listens upstream and the plugin was told not to start one. |
 | Login page returns after every sign-in | Different host spellings for the GUI and the proxy (see Requirements). |
 | `dsh-pgadmin: cannot bind` in the harness log | The proxy port is taken; change `port` (and `url` to match). |

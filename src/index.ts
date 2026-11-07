@@ -43,6 +43,15 @@ export interface PgAdminConfig {
   /** Arguments for `command`. Default `[]`. */
   readonly commandArgs?: readonly string[]
   /**
+   * First-run account for a pgAdmin database that has no user yet. Passed to
+   * the child as `PGADMIN_SETUP_EMAIL` / `PGADMIN_SETUP_PASSWORD`, which turns
+   * pgAdmin's interactive setup prompt into a non-interactive creation.
+   * Ignored once the database has a user.
+   */
+  readonly setupEmail?: string
+  /** Password for {@link PgAdminConfig.setupEmail}. */
+  readonly setupPassword?: string
+  /**
    * Sources appended to the `frame-ancestors` directive of pgAdmin's CSP, for
    * example `['http://127.0.0.1:8080']`. Default `[]` leaves the CSP untouched.
    */
@@ -88,6 +97,8 @@ interface ResolvedConfig {
   autostart: boolean
   command: string
   commandArgs: readonly string[]
+  setupEmail: string
+  setupPassword: string
   frameAncestors: readonly string[]
   origin: string
 }
@@ -117,6 +128,8 @@ function resolveConfig(raw: PgAdminConfig): ResolvedConfig {
     autostart: raw.autostart ?? true,
     command: raw.command ?? 'pgadmin4',
     commandArgs,
+    setupEmail: raw.setupEmail ?? '',
+    setupPassword: raw.setupPassword ?? '',
     frameAncestors: [...(raw.frameAncestors ?? [])],
     origin: upstream.origin,
   }
@@ -226,6 +239,10 @@ function escapeHtml(value: string): string {
  */
 function statusPage(config: ResolvedConfig, title: string, detail: string, log: string): string {
   const command = [config.command, ...config.commandArgs].join(' ')
+  const needsSetup = log.includes('EOFError')
+  const hint = needsSetup
+    ? '<p>This pgAdmin database has no user yet, so pgAdmin asked for one on stdin. Set <code>setupEmail</code> and <code>setupPassword</code> in this plugin\'s config to create it, or run <code>pgadmin4</code> once with <code>PGADMIN_SETUP_EMAIL</code> and <code>PGADMIN_SETUP_PASSWORD</code> set.</p>'
+    : ''
   const body = log.trim() === '' ? '' : `<pre>${escapeHtml(log.trim().slice(-1200))}</pre>`
   return `<!doctype html>
 <meta charset="utf-8">
@@ -245,6 +262,7 @@ function statusPage(config: ResolvedConfig, title: string, detail: string, log: 
 <main>
   <h1>${escapeHtml(title)}</h1>
   <p>${escapeHtml(detail)}</p>
+  ${hint}
   <p>Upstream <code>${escapeHtml(config.upstream.origin + config.upstream.pathname)}</code> · command <code>${escapeHtml(command)}</code></p>
   ${body}
 </main>
@@ -269,6 +287,20 @@ function sendStatus(response: ServerResponse, config: ResolvedConfig, title: str
     'cache-control': 'no-store',
   })
   response.end(statusPage(config, title, detail, log))
+}
+
+/** Prefix of the panel's own control endpoints, served by the same proxy. */
+const CONTROL_PREFIX = '/__dsh-pgadmin/'
+
+/**
+ * Origins allowed to call the control endpoints: the GUI on loopback. A
+ * browser page on this machine is the only caller that has business here.
+ * @param origin - the request's `Origin` header.
+ * @returns the value to echo back, or `undefined` when the caller is foreign.
+ */
+function allowedOrigin(origin: string | undefined): string | undefined {
+  if (origin === undefined) return undefined
+  return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(origin) ? origin : undefined
 }
 
 /**
@@ -315,8 +347,14 @@ export function createPgAdminProxy(raw: PgAdminConfig = {}): PgAdminProxy {
     // A Windows `.bat`/`.cmd` shim needs a shell; a real executable does not,
     // and spawning it directly keeps the pid we later stop.
     const throughShell = process.platform === 'win32' && !/\.exe$/i.test(config.command)
+    const environment = { ...process.env }
+    // A database with no user makes pgAdmin's migration prompt on stdin, which
+    // a detached child does not have; these turn that prompt into creation.
+    if (config.setupEmail !== '') environment.PGADMIN_SETUP_EMAIL = config.setupEmail
+    if (config.setupPassword !== '') environment.PGADMIN_SETUP_PASSWORD = config.setupPassword
     const spawned = spawn(config.command, [...config.commandArgs], {
       shell: throughShell,
+      env: environment,
       stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
     })
@@ -360,6 +398,54 @@ export function createPgAdminProxy(raw: PgAdminConfig = {}): PgAdminProxy {
     }
   }
 
+  /** Answer one control request: status, start, or stop. */
+  const handleControl = (request: IncomingMessage, response: ServerResponse): void => {
+    const route = (request.url ?? '').slice(CONTROL_PREFIX.length).split('?')[0] ?? ''
+    const origin = allowedOrigin(request.headers.origin)
+    const reply = (status: number, body: unknown): void => {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      }
+      if (origin !== undefined) {
+        headers['access-control-allow-origin'] = origin
+        headers['access-control-allow-methods'] = 'GET, POST, OPTIONS'
+        headers['access-control-allow-headers'] = 'content-type'
+        headers.vary = 'origin'
+      }
+      response.writeHead(status, headers)
+      response.end(JSON.stringify(body))
+    }
+    if (request.method === 'OPTIONS') {
+      reply(204, {})
+      return
+    }
+    if (route === 'status') {
+      void reachable(config).then((running) => {
+        reply(200, { running, autostart: config.autostart, upstream: config.upstream.origin })
+      })
+      return
+    }
+    if (route === 'start') {
+      void ensureUpstream().then((state) => {
+        reply(state.ok ? 200 : 502, state.ok ? { ok: true, running: true } : { ok: false, title: state.title, detail: state.detail })
+      })
+      return
+    }
+    if (route === 'stop') {
+      stopChild()
+      void (async () => {
+        const deadline = Date.now() + 5_000
+        while (Date.now() < deadline && await reachable(config)) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+        reply(200, { ok: true, running: await reachable(config) })
+      })()
+      return
+    }
+    reply(404, { ok: false, detail: `unknown control route ${route}` })
+  }
+
   /** Forward one HTTP request to the upstream, streaming both ways. */
   const forward = (request: IncomingMessage, response: ServerResponse): void => {
     const headers = requestHeaders(request.headers, config)
@@ -381,6 +467,10 @@ export function createPgAdminProxy(raw: PgAdminConfig = {}): PgAdminProxy {
   }
 
   const server: Server = createServer((request, response) => {
+    if ((request.url ?? '').startsWith(CONTROL_PREFIX)) {
+      handleControl(request, response)
+      return
+    }
     void ensureUpstream().then((state) => {
       if (!state.ok) {
         sendStatus(response, config, state.title, state.detail, stderrTail)

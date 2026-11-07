@@ -207,6 +207,51 @@ test('leaves a pgAdmin it found running when it closes', async () => {
   }
 })
 
+test('control endpoints report, start, and stop the server', async () => {
+  const port = await freePort()
+  const script = await standInServer(port)
+  const proxy = createPgAdminProxy({
+    upstream: `http://127.0.0.1:${String(port)}`,
+    port: 0,
+    command: process.execPath,
+    commandArgs: [script, String(port)],
+  })
+  await proxy.ready
+  const control = (route, init) => fetch(`${proxy.url}/__dsh-pgadmin/${route}`, init)
+  try {
+    const idle = await control('status', { headers: { origin: 'http://127.0.0.1:8080' } })
+    assert.equal(idle.headers.get('access-control-allow-origin'), 'http://127.0.0.1:8080')
+    assert.deepEqual(await idle.json(), { running: false, autostart: true, upstream: `http://127.0.0.1:${String(port)}` })
+
+    const started = await control('start', { method: 'POST' })
+    assert.equal(started.status, 200)
+    assert.deepEqual(await started.json(), { ok: true, running: true })
+    const after = await control('status')
+    assert.equal((await after.json()).running, true)
+
+    const stopped = await control('stop', { method: 'POST' })
+    assert.equal(stopped.status, 200)
+    assert.deepEqual(await stopped.json(), { ok: true, running: false })
+  } finally {
+    proxy.close()
+  }
+  assert.equal(await stoppedListening(port), true)
+})
+
+test('a foreign origin gets no control CORS grant', async () => {
+  const upstream = await startUpstream()
+  const proxy = createPgAdminProxy({ upstream: upstream.origin, port: 0, autostart: false })
+  await proxy.ready
+  try {
+    const response = await fetch(`${proxy.url}/__dsh-pgadmin/status`, { headers: { origin: 'https://example.com' } })
+    assert.equal(response.headers.get('access-control-allow-origin'), null)
+    assert.equal((await response.json()).running, true)
+  } finally {
+    proxy.close()
+    upstream.close()
+  }
+})
+
 test('rejects a non-http upstream at construction', () => {
   assert.throws(() => createPgAdminProxy({ upstream: 'file:///etc/passwd' }), /must be an http\(s\) URL/)
 })
